@@ -1,16 +1,10 @@
 """Totem Search Pattern.
-
-    WARNING:This program will continue to run until all totems are found. 
-            It is the responsibility of the caller to enforce a reasonable timeout.
-
     INPUTS:
-        -GPS coordinate of totem area (does not need to be accurate, within about 70m is fine)
+        -GPS coordinate of totem area on first iteration, then the previous iterations center point
         -buoy locations from perception
-        -totem locations from perception
     OUTPUTS:
-           -Found Totems (color and location)
-           -Current Itteration
-    
+        -waypoints for iteration of search pattern
+            (attempts approximate the center of the buoy field and to move in a circle about this point)    
     Approach:
         -Arive at given GPS location
         -Begin observing for totems and store location and color in a list as they are found
@@ -18,12 +12,13 @@
                 -Store list of unit vectors representing directions of detected buoys 
                 -Calculate the sum of the vectors and multiply by some scalar
             -Travel to point represented by calculated vector and drive in a circle where r=10m
-                -Store list of unit vectors representing directions of detected buoys from the center_point
-                -Calculate the sum of the vectors and multiply by some scalar
+                -Take list of detected buoys 
+                -Calculate the center of mass of the detected buoys
             -Repeat with r=20,30,0,10,20,30... until all requested totems are found
 """
 import numpy as np
 import rospy
+import tf
 from geometry_msgs.msg import PoseArray, Point
 from std_msgs.msg import Int8
 
@@ -31,38 +26,38 @@ from std_msgs.msg import Int8
 
 class TotemSearch:
     def __init__(self):
-        self.center_point = None
-        self.current_iter = 0#subscriber
         self.radius = (0,10,20,30)
-        self.buoy_list = []#subscriber
         self.gain = 1 #tune this
+        self.search_service = rospy.Service('mission/totem_search', TotemSearch, self.get_circle)
 
 
-    def calculate_center(self):
-        if self.current_iter == 0:
-            self.center_point = current_point#get boat position (x,y)
-        else:
-            direction = [sum(i) for i in zip(*self.buoy_list)]
-            self.center_point = direction*self.gain+self.center_point
-
-
-    def get_circle(self):
+    def get_circle(self,srv):
         """Take radius and returns waypoints with heading along the circle."""
-        if self.radius == 0:
+        if srv.iter == 0:
+            center_point = srv.center
+            direction = [sum(i) for i in zip(*srv.buoys)]
+            center_point = direction*self.gain+center_point
+        if self.radius[srv.iter] == 0:
             spin = []
             for i in range(0,4):
-                new_point = [self.center_point, [0.0,0.0,i*np.pi/2]]
+                eul = [0.0,0.0,i*np.pi/2]
+                quat = quaternion = tf.transformations.quaternion_from_euler(eul)
+                new_point = [center_point, quat]
                 spin.append(new_point)
-            return spin
+                waypoints = spin
+            return waypoints
         else:          
-            number_of_points = self.radius*4/10
+            number_of_points = floor(self.radius[srv.iter]*4/10)
             circle = []
             angle = 0
             for i in number_of_points:
                 angle = 2*np.pi/number_of_points + angle
-                point = (self.radius*[np.cos(angle), np.sin(angle)],angle+np.pi/2)
+                eul = angle+np.pi/2
+                quat = quaternion = tf.transformations.quaternion_from_euler(eul)
+                point = (self.radius[srv.iter]*[np.cos(angle), np.sin(angle)],quat)
                 circle.append(point)
-            return circle
+                waypoints = circle
+            return waypoints
     
     
 
@@ -73,4 +68,3 @@ def main(args):
 if __name__ == '__main__':
     rospy.init_node('totem_search')
     main(sys.argv)
-
