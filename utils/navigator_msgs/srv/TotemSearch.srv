@@ -3,3 +3,4 @@ Point center
 geometry_msgs/PoseArray buoys
 ---
 geometry_msgs/PoseArray waypoints
+Point center

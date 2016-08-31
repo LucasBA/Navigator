@@ -28,36 +28,54 @@ class TotemSearch:
     def __init__(self):
         self.radius = (0,10,20,30)
         self.gain = 1 #tune this
-        self.search_service = rospy.Service('mission/totem_search', TotemSearch, self.get_circle)
+        self.search_service = rospy.Service('mission/totem/search', TotemSearch, self.get_circle)
 
 
     def get_circle(self,srv):
         """Take radius and returns waypoints with heading along the circle."""
-        if srv.iter == 0:
-            center_point = srv.center
-            direction = [sum(i) for i in zip(*srv.buoys)]
-            center_point = direction*self.gain+center_point
-        if self.radius[srv.iter] == 0:
-            spin = []
-            for i in range(0,4):
-                eul = [0.0,0.0,i*np.pi/2]
-                quat = quaternion = tf.transformations.quaternion_from_euler(eul)
-                new_point = [center_point, quat]
-                spin.append(new_point)
-                waypoints = spin
-            return waypoints
-        else:          
-            number_of_points = floor(self.radius[srv.iter]*4/10)
+                
+        if srv.iter > len(self.radius):
+            iteration = srv.iter % self.radius
+        else:
+            iteration = srv.iter
+        if iteration < 0:
+            clockwise = iteration + 2
+            number_of_points = 4
             circle = []
             angle = 0
             for i in number_of_points:
-                angle = 2*np.pi/number_of_points + angle
-                eul = angle+np.pi/2
-                quat = quaternion = tf.transformations.quaternion_from_euler(eul)
-                point = (self.radius[srv.iter]*[np.cos(angle), np.sin(angle)],quat)
+                angle = 2 * np.pi / number_of_points + angle * clockwise
+                eul = angle+clockwise * np.pi / 2
+                quat = tf.transformations.quaternion_from_euler(eul)
+                point = (center_point + self.radius[srv.iter] * [np.cos(angle), np.sin(angle)], quat)
                 circle.append(point)
                 waypoints = circle
-            return waypoints
+            return waypoints, center_point
+
+        if self.radius[iteration] == 0:
+            center_point = srv.center
+            spin = []
+            for i in range(0,4):
+                eul = [0.0, 0.0, i * np.pi / 2]
+                quat = tf.transformations.quaternion_from_euler(eul)
+                new_point = [center_point, quat]
+                spin.append(new_point)
+                waypoints = spin
+            return waypoints, center_point
+        else:
+            direction = [sum(i) for i in zip(*srv.buoys)]
+            center_point = direction * self.gain + center_point
+            number_of_points = int(self.radius[srv.iter] * 4 / 10)
+            circle = []
+            angle = 0
+            for i in number_of_points:
+                angle = 2 * np.pi / number_of_points + angle
+                eul = angle + np.pi / 2
+                quat = tf.transformations.quaternion_from_euler(eul)
+                point = (center_point + self.radius[srv.iter] * [np.cos(angle), np.sin(angle)], quat)
+                circle.append(point)
+                waypoints = circle
+            return waypoints, center_point
     
     
 
